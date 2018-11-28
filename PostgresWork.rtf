@@ -1,0 +1,388 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1671
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww28600\viewh16580\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 /* PREFACE: After speaking with Heidi before Thanksgiving she said it was ok for me to import the assessment data into pgAdmin since I can generate more windows and work more comfortability.\
+Thank you all for being flexible.\
+*/\
+\
+SELECT*FROM grade_level_lookup;\
+SELECT*FROM test_benchmark_level;\
+SELECT*FROM test_scores;\
+SELECT*FROM student;\
+\
+/*\
+QUESTION 1: Check for Understanding\
+\
+To ensure you understand the concepts behind this exercise, start by finding each student's Independent Reading Level. Your results should look something like this:\
+\
+student_id | first_name | last_name | independent_reading_level\
++----------+------------+-----------+--------------------------+\
+| 1        | Michael    | Bluth     | O                        |\
+...\
+| 10       | Carl       | Weathers  | M                        |\
++----------+------------+-----------+--------------------------+\
+*/\
+\
+/*\
+The biggest challenge here are two things:\
+\
+Challenge 1. \
+There may be students who have not yet recorded a score at any point reflecting independence (Steven Holt).  \
+Meaning their test scores are only showing "instructional" or "frustrated" so we can't return all 10 student ids. \
+*/\
+\
+ALTER TABLE "student" RENAME COLUMN "id" TO "student_id";\
+\
+SELECT s.student_id, s.first_name, s.last_name, ts.text_level, ts.test_score, ts.test_date\
+FROM student s\
+JOIN test_scores ts\
+ON s.student_id = ts.student_id\
+WHERE test_score = 'Independent';\
+\
+/*\
+Response to Challenge 1: \
+\
+That being said I've tried to fit them into the my analysis and I have not been able to, \
+In the case of this exercise the only student with that label is in Kindergarden so we'll just assume that to be normal.\
+[see rows 17 - 18 for clarity in script above]\
+\
+With a larger dataset I would want to flag this. \
+\
+Solution to Challenge 1: \
+In order to capture this issue I will generate a new variable called "independent_reading_level"\
+That will give us all the text level & test score; this will be the new variable "independent_reading_level"  \
+It will report a NULL if they do not have a independent score. \
+\
+Ultimately I need the view to capture the 11 rows that show students who have demonstrated independence, their text levels, and show students who don't demonstrate independence while including the least amount of rows.\
+*/\
+\
+SELECT s.student_id, s.first_name, s.last_name, ts.text_level\
+FROM student s\
+JOIN test_scores ts\
+ON s.student_id = ts.student_id\
+WHERE test_score = 'Independent';\
+\
+/* we'll make a conditional that says if indepdent = 1 if not = 0.  \
+then run the over partition of average score\
+That will give us a variable where we get a 0 and a one and\
+Then write anotehr avariable that gives \
+*/\
+\
+SELECT s.*, ts.test_score, ts.test_date, ts.text_level\
+FROM student s\
+INNER JOIN test_scores ts\
+ON s.student_id = ts.student_id;\
+\
+/* created a new table called Q1 with a conditional that will help us get all the students in the view w/ minimal repeats */\
+\
+SELECT s.*, ts.test_score, ts.test_date, ts.text_level, \
+	CASE WHEN ts.test_score = 'Independent' THEN 1\
+		 WHEN ts.test_score = 'Instructional' THEN 0\
+		 ELSE NULL END AS test\
+INTO Q1\
+FROM student s\
+LEFT JOIN test_scores ts\
+ON s.student_id = ts.student_id;\
+\
+SELECT \
+student_id,\
+first_name,\
+last_name,\
+AVG(test) over(partition by student_id),\
+test_score,\
+text_level\
+INTO \
+Q2\
+FROM Q1;\
+\
+SELECT \
+q2.*, \
+	CASE WHEN q2.avg > 0 \
+		 THEN 'Independent'\
+		 ELSE 'Instructional' END AS state\
+INTO\
+Q8\
+FROM Q2 q2;\
+\
+SELECT*FROM Q1;\
+SELECT*FROM Q2;\
+SELECT*FROM Q8;\
+\
+select \
+student_id, first_name, last_name, test_score, text_level,\
+first_value (text_level) Over (partition by test_date order by test desc)\
+from\
+Q1;\
+\
+CREATE VIEW test1 \
+AS \
+SELECT student_id, first_name, last_name, test_score,\
+text_level, 'a' = \
+CASE\
+	WHEN avg > 0 THEN NULL\
+	ELSE test_score\
+	END AS varA \
+FROM Q8;\
+\
+drop table Answer1;\
+SELECT \
+student_id, first_name, last_name,test_score, text_level,varA\
+INTO\
+Answer1\
+FROM test1;\
+\
+SELECT*FROM answer1;\
+\
+ALTER TABLE Answer1\
+RENAME COLUMN text_level TO independent_reading_level;\
+\
+/* \
+[see below for answer to question 1]\
+While this isn't the exact way I would do this my work around gives us all the independet scores of each student \
+and accounts for the student(s) that don't have a score because they have passed zero assessments. \
+*/\
+\
+SELECT\
+student_id, \
+first_name, \
+last_name, \
+independent_reading_level,\
+vara\
+FROM Answer1\
+WHERE test_score = 'Independent'\
+OR vara = FALSE;\
+\
+/* QUESTION 2: Percent Reading on Grade Level\
+\
+Find the percent of students currently *reading on grade level* for each grade level. \
+\
+grade_level | percent_reading_on_GL\
++-----------+----------------------+\
+| K         + ?                    |\
+| 2         + ?                    |\
+| 3         + ?                    |\
+| 4         + ?                    |\
+| 5         + ?                    |\
++-----------+----------------------+\
+\
+*/\
+SELECT*FROM test_benchmark_level;\
+Select*from student;\
+select*from grade_level_lookup;\
+select*from test_scores;\
+\
+/* \
+1st) i want to merge variables in the test_benchmark_level table.\
+2nd) I want to create a condition where if certian letters are present its a 1 if not 0\
+3rd) solve \
+*/\
+\
+-- I've created a view called grade_range with a new variable that gives all the on grade level possibilities for "on grade level"--\
+DROP VIEW grade_range;\
+DROP VIEW grade_range2;\
+drop view stud_lvl_1;\
+\
+CREATE VIEW grade_range \
+AS select\
+grade_level, text_level_min,\
+CASE grade_level\
+	WHEN 'K' THEN 'K-ABCD'\
+	WHEN '1' THEN '1-EFGHIJ'\
+	WHEN '2' THEN '2-KLM'\
+	WHEN '3' THEN '3-NOP'\
+	WHEN '4' THEN '4-QRS'\
+	WHEN '5' THEN '5-TUV'\
+	ELSE NULL\
+	END AS grade_range\
+FROM test_benchmark_level;\
+	\
+SELECT*FROM grade_range;\
+\
+CREATE VIEW grade_range2\
+AS SELECT\
+grade_level, \
+text_level_min,\
+grade_range,\
+CASE grade_level\
+	WHEN 'K' THEN 0\
+	WHEN '1' THEN 1\
+	WHEN '2' THEN 2\
+	WHEN '3' THEN 3\
+	WHEN '4' THEN 4\
+	WHEN '5' THEN 5\
+	ELSE NULL \
+	END AS grade_int\
+FROM grade_range;\
+\
+SELECT*FROM grade_range2;\
+\
+drop view stud_lvl_1;\
+drop view stud_lvl_2;\
+CREATE VIEW stud_lvl_1\
+AS SELECT \
+s.student_id,\
+s.current_grade_level,\
+ts.text_level,\
+ts.test_score,\
+gr2.grade_range\
+FROM student s\
+LEFT JOIN test_scores ts \
+ON s.student_id = ts.student_id\
+LEFT JOIN grade_range2 gr2\
+ON s.current_grade_level = gr2.grade_int;\
+ \
+-- Now we have a view with all students, grade level, their text level, and the range of on grade.--\
+select*from stud_lvl_1;\
+\
+-- We nee a easy way to compare current grade levle & current text level, creating variable. --\
+CREATE VIEW stud_lvl_2  \
+AS SELECT\
+st.*,\
+ROW_NUMBER()\
+	OVER (PARTITION BY student_id ORDER BY current_grade_level asc) AS freq,\
+current_grade_level ||'-'|| text_level as current_lvl\
+FROM stud_lvl_1 st;\
+\
+SELECT*FROM stud_lvl_2;\
+\
+-- We now have an accurate count of students who's text level matches there grade level. --\
+-- I am concerned about instructional vs independent being capture properly. --\
+-- I still need to account for students who show up as independent more than once so they don't get double counted in grade level percetange. --\
+\
+CREATE VIEW stud_lvl_4\
+AS SELECT\
+student_id, \
+current_grade_level,\
+text_level,\
+test_score,\
+grade_range,\
+current_lvl,\
+freq,\
+CASE \
+	WHEN text_level = 'A' AND grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'B' AND grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'C' AND grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'D' AND grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'E' AND grade_range = '1-EFGHIJ' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'F' AND grade_range = '1-EFGHIJ' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'G' AND grade_range = '1-EFGHIJ' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'H' AND grade_range = '1-EFGHIJ' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'I' AND grade_range = '1-EFGHIJ' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'J' AND grade_range = '1-EFGHIJ' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'K' AND grade_range = '2-KLM' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'L' AND grade_range = '2-KLM' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'M' AND grade_range = '2-KLM' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'N' AND grade_range = '3-NOP' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'O' AND grade_range = '3-NOP' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'P' AND grade_range = '3-NOP' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'Q' AND grade_range = '4-QRS' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'R' AND grade_range = '4-QRS' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'S' AND grade_range = '4-QRS' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'T' AND grade_range = '5-TUV' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'U' AND grade_range = '5-TUV' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	WHEN text_level = 'V' AND grade_range = '5-TUV' AND test_score = 'Independent' AND freq = 1 THEN 1\
+	ELSE 0\
+	END AS current_student_range\
+FROM stud_lvl_2;\
+-- All three issues listed directly above are accounted for now I can run the percentage by grade accurately --\
+select*from stud_lvl_4\
+order by current_grade_level asc;\
+\
+-- Quality check --\
+SELECT\
+current_grade_level,\
+sum(current_student_range) as num_on_level,\
+count(distinct(student_id)) as stud_in_grade,\
+sum(current_student_range)*100/ count(distinct(student_id)) as percent_reading_on_GL\
+FROM stud_lvl_4\
+GROUP BY current_grade_level\
+ORDER BY current_grade_level asc;\
+/*\
+[see below for answer to question 2]\
+We now have an effective way to scale and accurately count the percentage of students who are on grade level.\
+*/\
+											   \
+SELECT\
+current_grade_level AS grade_level,\
+SUM(current_student_range)*100/ COUNT(DISTINCT(student_id)) AS percent_reading_on_GL\
+FROM stud_lvl_4\
+GROUP BY current_grade_level\
+ORDER BY current_grade_level ASC;	\
+											   \
+/*\
+QUESTION 3: Students in Need of Additional Support\
+\
+Find the list of students (id, first_name, last_name) reading more than 1 grade level below their current grade level. (e.g., a 4th grader reading at-or-below a 2nd grade reading level would be included in this list)\
+\
+id | first_name | last_name \
++---+-----------+----------+\
+| ? | ?         | ?        |\
++---+-----------+----------+\
+\
+*/\
+	s.student_id,\
+s.first_name,\
+s.last_name,\
+st4.test_score,\
+st4.text_level,\
+st4.grade_range,\
+st4.current_grade_level,\
+st4.freq,\
+SUM(current_student_range) OVER (PARTITION BY s.student_id) AS total,\
+st4.current_student_range\
+FROM student s\
+LEFT JOIN stud_lvl_4 st4\
+ON st4.student_id = s.student_id;\
+\
+SELECT*FROM asst_1;\
+\
+-- It might be me but I'm unable to do multiple where clauses right now so I have to keep create views to get the right conditions --\
+CREATE VIEW asst_2\
+AS SELECT\
+a1.*\
+FROM asst_1 a1\
+WHERE total = 0;\
+\
+SELECT*FROM asst_1;\
+\
+SELECT\
+a2.*\
+FROM asst_2 a2\
+WHERE freq = 1;\
+\
+drop view support_1;\
+CREATE VIEW support_1 \
+AS SELECT\
+student_id,\
+first_name,\
+last_name,\
+CASE\
+	WHEN text_level = 'K' AND grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'L' AND grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'M' AND grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'N' AND grade_range = '1-EFGHIJ' OR grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'O' AND grade_range = '1-EFGHIJ' OR grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'P' AND grade_range = '1-EFGHIJ' OR grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'Q' AND grade_range = '4-QRS'OR grade_range = '2-KLM' OR grade_range = '1-EFGHIJ' OR grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'R' AND grade_range = '4-QRS' OR grade_range = '2-KLM' OR grade_range = '1-EFGHIJ' OR grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'S' AND grade_range = '4-QRS' OR grade_range = '2-KLM' OR grade_range = '1-EFGHIJ' OR grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'T' AND grade_range = '5-TUV' OR grade_range = '3-NOP' OR grade_range = '2-KLM' OR grade_range = '1-EFGHIJ' OR grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'U' AND grade_range = '5-TUV' OR grade_range = '3-NOP' OR grade_range = '2-KLM' OR grade_range = '1-EFGHIJ' OR grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	WHEN text_level = 'V' AND grade_range = '5-TUV' OR grade_range = '3-NOP' OR grade_range = '2-KLM' OR grade_range = '1-EFGHIJ' OR grade_range = 'K-ABCD' AND test_score = 'Independent' AND freq = 1 THEN -1\
+	ELSE 0\
+	END AS support_needed\
+FROM asst_2\
+WHERE freq = 1;\
+\
+/* [see below answer to question 3]*/\
+											   \
+select\
+student_id,\
+first_name,\
+last_name\
+from support_1\
+WHERE support_needed < 0;	}
